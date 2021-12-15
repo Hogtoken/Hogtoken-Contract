@@ -594,7 +594,6 @@ contract Hogtoken is IERC20, Ownable {
     bool private _marketingEthMode = true;
 
     uint256 private _initSwapBreakpoint = 100000 * 10**_decimals;
-    uint256 public _maxTransferAmount = 100000 * 10**_decimals;
 
     modifier InitSwap {
         _currentlySwapping = true;
@@ -794,7 +793,6 @@ contract Hogtoken is IERC20, Ownable {
         require(sender != address(0), "ERC20: transfer from the zero address");
         require(recipient != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
-        require(amount < _maxTransferAmount, "Amount greater the maximum transfer amount");
 
         uint256 contractTokenBalance = balanceOf(address(this));
 
