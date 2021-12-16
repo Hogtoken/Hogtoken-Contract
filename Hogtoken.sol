@@ -606,6 +606,8 @@ contract Hogtoken is IERC20, Ownable {
     event LiquidityFeeChanged(address sender, uint8 newFee);
     event MarketingFeeChanged(address sender, uint8 newFee);
     event MarketingWalletChanged(address sender, address newWallet);
+    event MaxTransferAmountChanged(address sender, uint256 newMax);
+    event AutoLiquidityChanged(address sender, bool newState);
 
     constructor (address marketingWallet_, address uniswapRouter_) {
         _marketingWallet = marketingWallet_;
@@ -751,6 +753,12 @@ contract Hogtoken is IERC20, Ownable {
         emit MarketingFeeChanged(msg.sender, newFee);
     }
 
+    function changeMaxTransferAmount(uint256 newMax) external onlyOwner {
+        require(_maxTransferAmount != newMax, "No change");
+        _maxTransferAmount = newMax;
+        emit MaxTransferAmountChanged(msg.sender, newMax);
+    }
+
     function changeMarketingWallet(address newWallet) external onlyOwner {
         require(_marketingWallet != newWallet, "No change.");
         _marketingWallet = newWallet;
@@ -770,6 +778,7 @@ contract Hogtoken is IERC20, Ownable {
     function toggleLiquidity(bool newState) external onlyOwner {
         require(_provideLiquidity != newState, "No change.");
         _provideLiquidity = newState;
+        emit AutoLiquidityChanged(msg.sender, newState);
     }
 
     function toggleMarketingEthMode(bool newState) external onlyOwner {
