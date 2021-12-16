@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+    // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
 interface IERC20 {
@@ -594,7 +594,6 @@ contract Hogtoken is IERC20, Ownable {
     bool private _marketingEthMode = true;
 
     uint256 private _initSwapBreakpoint = 100000 * 10**_decimals;
-    uint256 public _maxTransferAmount = 100000 * 10**_decimals;
 
     modifier InitSwap {
         _currentlySwapping = true;
@@ -697,10 +696,10 @@ contract Hogtoken is IERC20, Ownable {
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns(uint256) {
         require(tAmount <= _tTotal, "Amount must be less than supply");
         if (!deductTransferFee) {
-            (uint256 rAmount,,,,) = _getValues(tAmount);
+            (uint256 rAmount,,,,) = _getValues(tAmount, tAmount);
             return rAmount;
         } else {
-            (,uint256 rTransferAmount,,,) = _getValues(tAmount);
+            (,uint256 rTransferAmount,,,) = _getValues(tAmount, tAmount);
             return rTransferAmount;
         }
     }
@@ -794,7 +793,6 @@ contract Hogtoken is IERC20, Ownable {
         require(sender != address(0), "ERC20: transfer from the zero address");
         require(recipient != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
-        require(amount < _maxTransferAmount, "Amount greater the maximum transfer amount");
 
         uint256 contractTokenBalance = balanceOf(address(this));
 
@@ -807,23 +805,23 @@ contract Hogtoken is IERC20, Ownable {
             uint256 liquidityAmount = (amount / 100) * _liquidityFee;
             uint256 marketingFeeAmount = (amount / 100) * _marketingFee;
 
-            _tokenTransfer(sender, address(this), liquidityAmount, false);
+            _tokenTransfer(sender, address(this), liquidityAmount, liquidityAmount, false);
 
             if (_marketingEthMode) {
-                _tokenTransfer(sender, address(this), marketingFeeAmount, false);
+                _tokenTransfer(sender, address(this), marketingFeeAmount, marketingFeeAmount, false);
                 uint256 initialBalance = address(this).balance;
                 _swapHogToEth(marketingFeeAmount);
                 uint256 addedBalance = address(this).balance - initialBalance;
                 Address.sendValue(payable(_marketingWallet), addedBalance);    
             }
             else {
-                _tokenTransfer(sender, _marketingWallet, marketingFeeAmount, false);
+                _tokenTransfer(sender, _marketingWallet, marketingFeeAmount, marketingFeeAmount, false);
             }
-
-            _tokenTransfer(sender, recipient, amount - liquidityAmount - marketingFeeAmount, true);    
+            
+            _tokenTransfer(sender, recipient, amount - liquidityAmount - marketingFeeAmount, amount, true);    
         }
         else {
-            _tokenTransfer(sender, recipient, amount, false);
+            _tokenTransfer(sender, recipient, amount, amount, false);
         }
     }
 
@@ -867,19 +865,19 @@ contract Hogtoken is IERC20, Ownable {
         _reflectionFee = _previousReflectionFee;
     }
 
-    function _tokenTransfer(address sender, address recipient, uint256 amount, bool takeReflectFee) private {
+    function _tokenTransfer(address sender, address recipient, uint256 amount, uint256 orgAmount, bool takeReflectFee) private {
         if (!takeReflectFee) {
             _removeReflectFees();
         }
 
         if (_isExcluded[sender] && !_isExcluded[recipient]) {
-            _transferFromExcluded(sender, recipient, amount);
+            _transferFromExcluded(sender, recipient, amount, orgAmount);
         } else if (!_isExcluded[sender] && _isExcluded[recipient]) {
-            _transferToExcluded(sender, recipient, amount);
+            _transferToExcluded(sender, recipient, amount, orgAmount);
         } else if (_isExcluded[sender] && _isExcluded[recipient]) {
-            _transferBothExcluded(sender, recipient, amount);
+            _transferBothExcluded(sender, recipient, amount, orgAmount);
         } else {
-            _transferStandard(sender, recipient, amount);
+            _transferStandard(sender, recipient, amount, orgAmount);
         }
 
         if (!takeReflectFee) {
@@ -887,16 +885,16 @@ contract Hogtoken is IERC20, Ownable {
         }
     }
 
-    function _transferStandard(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount);
+    function _transferStandard(address sender, address recipient, uint256 tAmount, uint256 orgAmount) private {
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount, orgAmount);
         _rOwned[sender] = _rOwned[sender] - rAmount;
         _rOwned[recipient] = _rOwned[recipient] + rTransferAmount;       
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function _transferToExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount);
+    function _transferToExcluded(address sender, address recipient, uint256 tAmount, uint256 orgAmount) private {
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount, orgAmount);
         _rOwned[sender] = _rOwned[sender] - rAmount;
         _tOwned[recipient] = _tOwned[recipient] + tTransferAmount;
         _rOwned[recipient] = _rOwned[recipient] + rTransferAmount;           
@@ -904,8 +902,8 @@ contract Hogtoken is IERC20, Ownable {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function _transferFromExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount);
+    function _transferFromExcluded(address sender, address recipient, uint256 tAmount, uint256 orgAmount) private {
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount, orgAmount);
         _tOwned[sender] = _tOwned[sender] - tAmount;
         _rOwned[sender] = _rOwned[sender] - rAmount;
         _rOwned[recipient] = _rOwned[recipient] + rTransferAmount;   
@@ -913,8 +911,8 @@ contract Hogtoken is IERC20, Ownable {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount);
+    function _transferBothExcluded(address sender, address recipient, uint256 tAmount, uint256 orgAmount) private {
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee) = _getValues(tAmount, orgAmount);
         _tOwned[sender] = _tOwned[sender] - tAmount;
         _rOwned[sender] = _rOwned[sender] - rAmount;
         _tOwned[recipient] = _tOwned[recipient] + tTransferAmount;
@@ -928,15 +926,15 @@ contract Hogtoken is IERC20, Ownable {
         _tFeeTotal = _tFeeTotal + tFee;
     }
 
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256) {
-        (uint256 tTransferAmount, uint256 tFee) = _getTValues(tAmount);
+    function _getValues(uint256 tAmount, uint256 orgAmount) private view returns (uint256, uint256, uint256, uint256, uint256) {
+        (uint256 tTransferAmount, uint256 tFee) = _getTValues(tAmount, orgAmount);
         uint256 currentRate =  _getRate();
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, currentRate);
         return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee);
     }
 
-    function _getTValues(uint256 tAmount) private view returns (uint256, uint256) {
-        uint256 tFee = (tAmount / 100) * _reflectionFee;
+    function _getTValues(uint256 tAmount, uint256 orgAmount) private view returns (uint256, uint256) {
+        uint256 tFee = (orgAmount / 100) * _reflectionFee;
         uint256 tTransferAmount = tAmount - tFee;
         return (tTransferAmount, tFee);
     }
