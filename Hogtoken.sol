@@ -581,6 +581,7 @@ contract Hogtoken is IERC20, Ownable {
     uint8 public _reflectionFee = 4;
     uint8 public _liquidityFee = 4;
     uint8 public _marketingFee = 2;
+    uint8 public _burnFee = 1;
 
     uint8 private _previousReflectionFee;
 
@@ -592,6 +593,8 @@ contract Hogtoken is IERC20, Ownable {
 
     address public _marketingWallet;
     bool private _marketingEthMode = true;
+
+    address public _burnWallet;
 
     uint256 private _initSwapBreakpoint = 100000 * 10**_decimals;
     uint256 public _maxTransferAmount = 100000 * 10**_decimals;
@@ -605,12 +608,15 @@ contract Hogtoken is IERC20, Ownable {
     event ReflectionFeeChanged(address sender, uint8 newFee);
     event LiquidityFeeChanged(address sender, uint8 newFee);
     event MarketingFeeChanged(address sender, uint8 newFee);
+    event BurnFeeChanged(address sender, uint8 newFee);
     event MarketingWalletChanged(address sender, address newWallet);
+    event BurnWalletChanged(address sender, address newWallet);
     event MaxTransferAmountChanged(address sender, uint256 newMax);
     event AutoLiquidityChanged(address sender, bool newState);
 
-    constructor (address marketingWallet_, address uniswapRouter_) {
+    constructor (address marketingWallet_, address burnWallet_, address uniswapRouter_) {
         _marketingWallet = marketingWallet_;
+        _burnWallet = burnWallet_;
 
         _rOwned[owner()] = _rTotal;
 
@@ -620,6 +626,7 @@ contract Hogtoken is IERC20, Ownable {
         _isExcludedFee[owner()] = true;
         _isExcludedFee[address(this)] = true;
         _isExcludedFee[_marketingWallet] = true;
+        _isExcludedFee[_burnWallet] = true;
 
         emit Transfer(address(0), msg.sender, _tTotal);
     }
@@ -753,6 +760,12 @@ contract Hogtoken is IERC20, Ownable {
         emit MarketingFeeChanged(msg.sender, newFee);
     }
 
+    function changeBurnFee(uint8 newFee) external onlyOwner {
+        require(_burnFee != newFee, "No change.");
+        _burnFee = newFee;
+        emit BurnFeeChanged(msg.sender, newFee);
+    }
+
     function changeMaxTransferAmount(uint256 newMax) external onlyOwner {
         require(_maxTransferAmount != newMax, "No change");
         _maxTransferAmount = newMax;
@@ -764,6 +777,13 @@ contract Hogtoken is IERC20, Ownable {
         _marketingWallet = newWallet;
         emit MarketingWalletChanged(msg.sender, newWallet);
     }
+
+    function changeBurnWallet(address newWallet) external onlyOwner {
+        require(_burnWallet != newWallet, "No change.");
+        _burnWallet = newWallet;
+        emit BurnWalletChanged(msg.sender, newWallet);
+    }
+
 
     function changeFeeExclusion(address account, bool takeFee) external onlyOwner {
         require(_isExcludedFee[account] != takeFee, "No change.");
@@ -815,8 +835,10 @@ contract Hogtoken is IERC20, Ownable {
         if (takeFee) {
             uint256 liquidityAmount = (amount / 100) * _liquidityFee;
             uint256 marketingFeeAmount = (amount / 100) * _marketingFee;
+            uint256 burnFeeAmount = (amount / 100) * _burnFee;
 
             _tokenTransfer(sender, address(this), liquidityAmount, liquidityAmount, false);
+            _tokenTransfer(sender, _burnWallet, burnFeeAmount, burnFeeAmount, false);
 
             if (_marketingEthMode) {
                 _tokenTransfer(sender, address(this), marketingFeeAmount, marketingFeeAmount, false);
@@ -829,7 +851,7 @@ contract Hogtoken is IERC20, Ownable {
                 _tokenTransfer(sender, _marketingWallet, marketingFeeAmount, marketingFeeAmount, false);
             }
 
-            _tokenTransfer(sender, recipient, amount - liquidityAmount - marketingFeeAmount, amount, true);    
+            _tokenTransfer(sender, recipient, amount - (liquidityAmount + marketingFeeAmount + burnFeeAmount), amount, true);
         }
         else {
             _tokenTransfer(sender, recipient, amount, amount, false);
